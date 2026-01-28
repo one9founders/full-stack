@@ -18,12 +18,11 @@ export async function signUp(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const name = formData.get('name') as string;
-  const turnstileToken = formData.get('turnstileToken') as string;
 
   const response = await fetch(`${API_URL}/auth/register/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ email, password, name }),
   });
 
   if (!response.ok) {
@@ -43,12 +42,11 @@ export async function signUp(formData: FormData) {
 export async function login(formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
-  const turnstileToken = formData.get('turnstileToken') as string;
 
   const response = await fetch(`${API_URL}/auth/login/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ email, password }),
   });
 
   if (!response.ok) {
@@ -65,11 +63,11 @@ export async function login(formData: FormData) {
   return data.user;
 }
 
-export async function googleAuth(credential: string, turnstileToken: string) {
+export async function googleAuth(credential: string) {
   const response = await fetch(`${API_URL}/auth/google/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ credential, turnstile_token: turnstileToken }),
+    body: JSON.stringify({ credential }),
   });
 
   if (!response.ok) {

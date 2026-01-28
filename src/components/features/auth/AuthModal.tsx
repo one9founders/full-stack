@@ -2,7 +2,6 @@
 
 import { useState, useTransition, useEffect } from 'react';
 import { signUp, login, googleAuth } from '@/lib/actions/auth';
-import CloudflareCheck from '@/components/shared/CloudflareCheck';
 import Swal from 'sweetalert2';
 import posthog from 'posthog-js';
 
@@ -20,7 +19,6 @@ declare global {
 
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>(defaultMode);
-  const [turnstileToken, setTurnstileToken] = useState('');
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -61,17 +59,12 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
         document.head.removeChild(script);
       }
     };
-  }, [isOpen, turnstileToken]);
+  }, [isOpen]);
 
   const handleGoogleResponse = (response: any) => {
-    if (!turnstileToken) {
-      Swal.fire('Error', 'Please complete the verification first', 'error');
-      return;
-    }
-
     startTransition(async () => {
       try {
-        const user = await googleAuth(response.credential, turnstileToken);
+        const user = await googleAuth(response.credential);
 
         // Identify user in PostHog
         posthog.identify(user.email, {
@@ -99,13 +92,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!turnstileToken) {
-      Swal.fire('Error', 'Please complete the verification', 'error');
-      return;
-    }
-
     const formData = new FormData(e.currentTarget);
-    formData.append('turnstileToken', turnstileToken);
 
     startTransition(async () => {
       try {
@@ -174,11 +161,9 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
             className="w-full px-4 py-2 rounded-lg text-white bg-[var(--gray-800)] border border-[var(--gray-700)]"
           />
 
-          <CloudflareCheck onVerified={(token) => setTurnstileToken(token)} />
-
           <button
             type="submit"
-            disabled={isPending || !turnstileToken}
+            disabled={isPending}
             className="w-full py-2 rounded-lg text-white disabled:opacity-50 bg-[var(--brand-primary)]"
           >
             {isPending ? 'Processing...' : mode === 'login' ? 'Login' : 'Sign Up'}
@@ -195,7 +180,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
             </div>
           </div>
 
-          <div id="google-signin-button" className={`mt-4 ${turnstileToken ? 'opacity-100 pointer-events-auto' : 'opacity-50 pointer-events-none'}`}></div>
+          <div id="google-signin-button" className="mt-4"></div>
         </div>
 
         <p className="mt-4 text-center text-sm text-[var(--gray-500)]">
