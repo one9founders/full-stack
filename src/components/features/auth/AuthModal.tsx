@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
-import { signUp, login, googleAuth } from '@/lib/actions/auth';
+import { signIn } from 'next-auth/react';
 import Swal from 'sweetalert2';
 import posthog from 'posthog-js';
 
@@ -64,25 +64,26 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
   const handleGoogleResponse = (response: any) => {
     startTransition(async () => {
       try {
-        const user = await googleAuth(response.credential);
-
-        // Identify user in PostHog
-        posthog.identify(user.email, {
-          email: user.email,
-          name: user.name,
+        const result = await signIn('google', {
+          credential: response.credential,
+          redirect: false,
         });
+
+        if (result?.error) {
+          throw new Error(result.error);
+        }
 
         // Capture Google auth event
         posthog.capture('user_logged_in_google', {
-          email: user.email,
-          name: user.name,
+          method: 'google',
         });
 
-        await Swal.fire('Success', `Welcome ${user.name}!`, 'success');
+        await Swal.fire('Success', 'Welcome!', 'success');
         onClose();
+        window.location.reload();
       } catch (error: any) {
         posthog.captureException(error);
-        Swal.fire('Error', error.message, 'error');
+        Swal.fire('Error', error.message || 'Google authentication failed', 'error');
       }
     });
   };
@@ -93,35 +94,50 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
     e.preventDefault();
     
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const name = formData.get('name') as string;
 
     startTransition(async () => {
       try {
-        const email = formData.get('email') as string;
-        const user = mode === 'signup' ? await signUp(formData) : await login(formData);
-
-        // Identify user in PostHog
-        posthog.identify(user.email || email, {
-          email: user.email || email,
-          name: user.name,
-        });
-
-        // Capture appropriate event based on mode
         if (mode === 'signup') {
-          posthog.capture('user_signed_up', {
-            email: user.email || email,
-            name: user.name,
-            method: 'email',
+          // Register the user first
+          const registerResponse = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, name }),
           });
-        } else {
-          posthog.capture('user_logged_in', {
-            email: user.email || email,
-            name: user.name,
+
+          if (!registerResponse.ok) {
+            const error = await registerResponse.json();
+            throw new Error(error.error || 'Registration failed');
+          }
+
+          posthog.capture('user_signed_up', {
+            email,
             method: 'email',
           });
         }
 
-        await Swal.fire('Success', `Welcome ${user.name}!`, 'success');
+        // Sign in with credentials
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          throw new Error(result.error === 'CredentialsSignin' ? 'Invalid email or password' : result.error);
+        }
+
+        posthog.capture('user_logged_in', {
+          email,
+          method: 'email',
+        });
+
+        await Swal.fire('Success', 'Welcome!', 'success');
         onClose();
+        window.location.reload();
       } catch (error: any) {
         posthog.captureException(error);
         Swal.fire('Error', error.message, 'error');
