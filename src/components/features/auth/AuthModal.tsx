@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition, useEffect } from 'react';
+import { useTransition, useEffect } from 'react';
 import { signIn } from 'next-auth/react';
 import Swal from 'sweetalert2';
 import posthog from 'posthog-js';
@@ -8,7 +8,6 @@ import posthog from 'posthog-js';
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  defaultMode?: 'login' | 'signup';
 }
 
 declare global {
@@ -17,8 +16,7 @@ declare global {
   }
 }
 
-export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalProps) {
-  const [mode, setMode] = useState<'login' | 'signup'>(defaultMode);
+export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -96,29 +94,9 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
     const formData = new FormData(e.currentTarget);
     const email = formData.get('email') as string;
     const password = formData.get('password') as string;
-    const name = formData.get('name') as string;
 
     startTransition(async () => {
       try {
-        if (mode === 'signup') {
-          // Register the user first
-          const registerResponse = await fetch('/api/auth/register', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password, name }),
-          });
-
-          if (!registerResponse.ok) {
-            const error = await registerResponse.json();
-            throw new Error(error.error || 'Registration failed');
-          }
-
-          posthog.capture('user_signed_up', {
-            email,
-            method: 'email',
-          });
-        }
-
         // Sign in with credentials
         const result = await signIn('credentials', {
           email,
@@ -148,19 +126,9 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
   return (
     <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50" onClick={onClose}>
       <div className="rounded-lg p-8 max-w-md w-full bg-[var(--gray-900)] border border-[var(--gray-800)]" onClick={(e) => e.stopPropagation()}>
-        <h2 className="text-2xl font-bold mb-6 text-white">{mode === 'login' ? 'Login' : 'Sign Up'}</h2>
+        <h2 className="text-2xl font-bold mb-6 text-white">Login</h2>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === 'signup' && (
-            <input
-              type="text"
-              name="name"
-              placeholder="Full Name"
-              required
-              className="w-full px-4 py-2 rounded-lg text-white bg-[var(--gray-800)] border border-[var(--gray-700)]"
-            />
-          )}
-          
           <input
             type="email"
             name="email"
@@ -182,7 +150,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
             disabled={isPending}
             className="w-full py-2 rounded-lg text-white disabled:opacity-50 bg-[var(--brand-primary)]"
           >
-            {isPending ? 'Processing...' : mode === 'login' ? 'Login' : 'Sign Up'}
+            {isPending ? 'Processing...' : 'Login'}
           </button>
         </form>
 
@@ -198,16 +166,6 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
 
           <div id="google-signin-button" className="mt-4"></div>
         </div>
-
-        <p className="mt-4 text-center text-sm text-[var(--gray-500)]">
-          {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button
-            onClick={() => setMode(mode === 'login' ? 'signup' : 'login')}
-            className="hover:underline text-[var(--brand-primary)]"
-          >
-            {mode === 'login' ? 'Sign Up' : 'Login'}
-          </button>
-        </p>
       </div>
     </div>
   );
