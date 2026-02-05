@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useTransition, useEffect } from 'react';
-import { signUp, login, googleAuth } from '@/lib/actions/auth';
-import CloudflareCheck from '@/components/shared/CloudflareCheck';
+import { signIn } from 'next-auth/react';
 import Swal from 'sweetalert2';
 import posthog from 'posthog-js';
 
@@ -20,7 +19,6 @@ declare global {
 
 export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: AuthModalProps) {
   const [mode, setMode] = useState<'login' | 'signup'>(defaultMode);
-  const [turnstileToken, setTurnstileToken] = useState('');
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -61,35 +59,31 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
         document.head.removeChild(script);
       }
     };
-  }, [isOpen, turnstileToken]);
+  }, [isOpen]);
 
   const handleGoogleResponse = (response: any) => {
-    if (!turnstileToken) {
-      Swal.fire('Error', 'Please complete the verification first', 'error');
-      return;
-    }
-
     startTransition(async () => {
       try {
-        const user = await googleAuth(response.credential, turnstileToken);
-
-        // Identify user in PostHog
-        posthog.identify(user.email, {
-          email: user.email,
-          name: user.name,
+        const result = await signIn('google', {
+          credential: response.credential,
+          redirect: false,
         });
+
+        if (result?.error) {
+          throw new Error(result.error);
+        }
 
         // Capture Google auth event
         posthog.capture('user_logged_in_google', {
-          email: user.email,
-          name: user.name,
+          method: 'google',
         });
 
-        await Swal.fire('Success', `Welcome ${user.name}!`, 'success');
+        await Swal.fire('Success', 'Welcome!', 'success');
         onClose();
+        window.location.reload();
       } catch (error: any) {
         posthog.captureException(error);
-        Swal.fire('Error', error.message, 'error');
+        Swal.fire('Error', error.message || 'Google authentication failed', 'error');
       }
     });
   };
@@ -99,42 +93,51 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     
-    if (!turnstileToken) {
-      Swal.fire('Error', 'Please complete the verification', 'error');
-      return;
-    }
-
     const formData = new FormData(e.currentTarget);
-    formData.append('turnstileToken', turnstileToken);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const name = formData.get('name') as string;
 
     startTransition(async () => {
       try {
-        const email = formData.get('email') as string;
-        const user = mode === 'signup' ? await signUp(formData) : await login(formData);
-
-        // Identify user in PostHog
-        posthog.identify(user.email || email, {
-          email: user.email || email,
-          name: user.name,
-        });
-
-        // Capture appropriate event based on mode
         if (mode === 'signup') {
-          posthog.capture('user_signed_up', {
-            email: user.email || email,
-            name: user.name,
-            method: 'email',
+          // Register the user first
+          const registerResponse = await fetch('/api/auth/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password, name }),
           });
-        } else {
-          posthog.capture('user_logged_in', {
-            email: user.email || email,
-            name: user.name,
+
+          if (!registerResponse.ok) {
+            const error = await registerResponse.json();
+            throw new Error(error.error || 'Registration failed');
+          }
+
+          posthog.capture('user_signed_up', {
+            email,
             method: 'email',
           });
         }
 
-        await Swal.fire('Success', `Welcome ${user.name}!`, 'success');
+        // Sign in with credentials
+        const result = await signIn('credentials', {
+          email,
+          password,
+          redirect: false,
+        });
+
+        if (result?.error) {
+          throw new Error(result.error === 'CredentialsSignin' ? 'Invalid email or password' : result.error);
+        }
+
+        posthog.capture('user_logged_in', {
+          email,
+          method: 'email',
+        });
+
+        await Swal.fire('Success', 'Welcome!', 'success');
         onClose();
+        window.location.reload();
       } catch (error: any) {
         posthog.captureException(error);
         Swal.fire('Error', error.message, 'error');
@@ -174,11 +177,9 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
             className="w-full px-4 py-2 rounded-lg text-white bg-[var(--gray-800)] border border-[var(--gray-700)]"
           />
 
-          <CloudflareCheck onVerified={(token) => setTurnstileToken(token)} />
-
           <button
             type="submit"
-            disabled={isPending || !turnstileToken}
+            disabled={isPending}
             className="w-full py-2 rounded-lg text-white disabled:opacity-50 bg-[var(--brand-primary)]"
           >
             {isPending ? 'Processing...' : mode === 'login' ? 'Login' : 'Sign Up'}
@@ -195,7 +196,7 @@ export default function AuthModal({ isOpen, onClose, defaultMode = 'login' }: Au
             </div>
           </div>
 
-          <div id="google-signin-button" className={`mt-4 ${turnstileToken ? 'opacity-100 pointer-events-auto' : 'opacity-50 pointer-events-none'}`}></div>
+          <div id="google-signin-button" className="mt-4"></div>
         </div>
 
         <p className="mt-4 text-center text-sm text-[var(--gray-500)]">

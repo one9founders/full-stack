@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Bricolage_Grotesque } from "next/font/google";
 import "./globals.css";
-import { ReCaptchaProvider } from "@/lib/recaptcha";
+import SessionProvider from "@/components/providers/SessionProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -101,9 +101,9 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${bricolageGrotesque.variable} antialiased`}
       >
-        <ReCaptchaProvider>
+        <SessionProvider>
           {children}
-        </ReCaptchaProvider>
+        </SessionProvider>
       </body>
     </html>
   );

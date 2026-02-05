@@ -4,7 +4,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { submissionAPI } from '@/lib/api/apiClient';
 import { showSuccess, showError } from '@/lib/utils/sweetAlert';
-import { useReCaptcha } from '@/lib/recaptcha';
 import posthog from 'posthog-js';
 
 export default function SubmitToolPageClient() {
@@ -21,7 +20,6 @@ export default function SubmitToolPageClient() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
-  const { executeRecaptcha } = useReCaptcha();
 
 
 
@@ -38,13 +36,7 @@ export default function SubmitToolPageClient() {
     setMessage('');
 
     try {
-      // Get reCAPTCHA token
-      const recaptchaToken = await executeRecaptcha('submit_tool');
-
       const submissionData: Record<string, unknown> = { ...formData };
-      if (recaptchaToken) {
-        submissionData.recaptcha_token = recaptchaToken;
-      }
 
       await submissionAPI.submit(submissionData);
 
