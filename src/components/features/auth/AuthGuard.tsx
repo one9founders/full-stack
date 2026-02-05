@@ -30,7 +30,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 bg-[var(--gray-black)] blur-sm pointer-events-none overflow-hidden">
           {children}
         </div>
-        <AuthModal isOpen={true} onClose={checkAuth} defaultMode="signup" />
+        <AuthModal isOpen={true} onClose={checkAuth} />
       </>
     );
   }
